@@ -1,6 +1,6 @@
-/* model.js - MockVisionModel | no ES modules, works via file:// */
+/* model.js - MockVisionModel | ES module */
 
-class MockVisionModel {
+export class MockVisionModel {
     constructor(config = {}) {
         this.accuracy = config.accuracy ?? 1.0;
         this.falsePositiveRate = config.falsePositiveRate ?? 0.0;
@@ -51,7 +51,6 @@ class MockVisionModel {
         if (latencyMs !== undefined) this.latencyMs = latencyMs;
     }
 
-    /** Replace body with fetch() call to plug in your real model */
     async detectRemote(endpoint, visibleEntities) {
         const response = await fetch(endpoint, {
             method: 'POST',

@@ -1,8 +1,10 @@
-/* simulation.js - Robocrop simulation engine | no ES modules, works via file:// */
+/* simulation.js - Robocrop simulation engine | ES module */
+
+import { MockVisionModel } from './model.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FIELD = {
+export const FIELD = {
     ROWS: 6,
     ROW_SPACING: 90,
     ROW_LENGTH: 1800,
@@ -10,20 +12,20 @@ const FIELD = {
     MARGIN_LEFT: 40,
 };
 
-const PLANT = {
+export const PLANT = {
     CROP_RADIUS: 10,
     WEED_RADIUS: 6,
     MIN_SPACING: 38,
 };
 
-const ROBOT = {
+export const ROBOT = {
     WIDTH: 60,
     HEIGHT: 80,
     CAMERA_FOV_AHEAD: 120,
     CAMERA_FOV_SIDE: FIELD.ROW_SPACING / 2,
 };
 
-const ROTOR = {
+export const ROTOR = {
     TINE_COUNT: 1,
     TINE_RADIUS: 18,
     RPM: 120,
@@ -35,20 +37,20 @@ const ROTOR = {
 let _nextId = 0;
 const uid = () => `e${_nextId++}`;
 
-class Plant {
+export class Plant {
     constructor(x, y, type) {
         this.id = uid();
         this.x = x;
         this.y = y;
         this.type = type;
         this.radius = type === 'crop' ? PLANT.CROP_RADIUS : PLANT.WEED_RADIUS;
-        this.state = 'alive';   // 'alive' | 'removed' | 'damaged'
+        this.state = 'alive';
         this.w = this.radius * 2;
         this.h = this.radius * 2;
     }
 }
 
-class CropRow {
+export class CropRow {
     constructor(index) {
         this.index = index;
         this.centreX = FIELD.MARGIN_LEFT + ROBOT.WIDTH / 2 + index * FIELD.ROW_SPACING;
@@ -68,13 +70,13 @@ class CropRow {
     }
 }
 
-class ERotor {
+export class ERotor {
     constructor(rowCentreX) {
         this.rowCentreX = rowCentreX + ROTOR.OFFSET + ROTOR.TINE_RADIUS / 2;
         this.angle = -Math.PI / 2;
         this.isRetracted = true;
         this.rpm = ROTOR.RPM;
-        this.trackedCrops = new Map(); // entityId -> plant object
+        this.trackedCrops = new Map();
     }
 
     addDetection(plant) {
@@ -82,7 +84,6 @@ class ERotor {
     }
 
     update(deltaMs, robotY, robotSpeed) {
-        // Clean up crops that have safely passed behind the tractor completely
         for (const [id, p] of this.trackedCrops.entries()) {
             if (p.y > robotY + 120) this.trackedCrops.delete(id);
         }
@@ -111,7 +112,6 @@ class ERotor {
     getTinePositions(robotY) {
         const positions = [];
         for (let i = 0; i < ROTOR.TINE_COUNT; i++) {
-            // sistemin sıfır açısı: şuanki -90 derece 0 derece yapıldı
             const a = this.angle - (Math.PI / 2) + (i / ROTOR.TINE_COUNT) * 2 * Math.PI;
             positions.push({
                 x: this.rowCentreX + Math.cos(a) * ROTOR.TINE_RADIUS,
@@ -122,12 +122,12 @@ class ERotor {
     }
 }
 
-class Robot {
+export class Robot {
     constructor(rows) {
         this.rows = rows;
         this.y = FIELD.MARGIN_TOP;
         this.speed = 60;
-        this.lateralOffset = 0; // px displacement left/right from ideal center
+        this.lateralOffset = 0;
         this.rotors = rows.map(row => new ERotor(row.centreX));
         this.cameraFovAhead = ROBOT.CAMERA_FOV_AHEAD;
         this.finished = false;
@@ -141,7 +141,6 @@ class Robot {
             this.finished = true;
         }
 
-        // Rotors move with lateralOffset
         this.rotors.forEach((r, i) => {
             r.rowCentreX = this.rows[i].centreX + ROTOR.OFFSET + ROTOR.TINE_RADIUS / 2 + this.lateralOffset;
             r.update(deltaMs, this.y, this.speed);
@@ -152,17 +151,13 @@ class Robot {
         const visible = [];
         const yMin = this.y;
         const yMax = this.y + this.cameraFovAhead;
-        // Camera also shifts with lateral offset
-        const xOffset = 0; //this.lateralOffset;
 
         rows.forEach(row => {
             row.plants.forEach(plant => {
-                // If it's outside the shifted FOV horizontally, we shouldn't see it (for extreme shifts)
-                // But simplified: assuming FOV is wide enough. We just shift the returned X.
                 if (plant.state === 'alive' && plant.y >= yMin && plant.y <= yMax) {
                     visible.push({
                         id: plant.id, type: plant.type,
-                        x: plant.x - plant.radius - xOffset, // camera sees it offset
+                        x: plant.x - plant.radius,
                         y: plant.y - plant.radius,
                         w: plant.w, h: plant.h,
                         _plant: plant, _rowIndex: row.index,
@@ -174,7 +169,7 @@ class Robot {
     }
 }
 
-class Stats {
+export class Stats {
     constructor() { this.reset(); }
 
     reset() {
@@ -203,7 +198,7 @@ class Stats {
 
 // ─── Simulation Engine ────────────────────────────────────────────────────────
 
-class SimulationEngine {
+export class SimulationEngine {
     constructor(config = {}) {
         this.config = {
             rows: config.rows ?? FIELD.ROWS,
@@ -285,8 +280,6 @@ class SimulationEngine {
         return { rows: this._rows, robot: this._robot, stats: this.stats, config: this.config };
     }
 
-    // ── Private ──────────────────────────────────────────────────────────────
-
     _initField() {
         _nextId = 0;
         this._rows = [];
@@ -334,10 +327,7 @@ class SimulationEngine {
             if (!entity) return;
             const rowIndex = entity._rowIndex;
             if (det.label === 'crop') {
-                // Pass the ground-truth physical properties of the detected crop to the rotor 
-                // so it can predict physics
                 this._robot.rotors[rowIndex].addDetection(entity._plant);
-
                 if (det.trueType === 'weed') {
                     this.stats.falseNegatives++;
                     this.stats.log({ type: 'fn', label: 'Yabancı ot kaçtı', entityId: det.entityId, y: entity._plant.y, row: rowIndex });

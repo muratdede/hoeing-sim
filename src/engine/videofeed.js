@@ -1,6 +1,6 @@
-/* videofeed.js - Real video input pipeline | no ES modules, works via file:// */
+/* videofeed.js - Real video input pipeline | ES module */
 
-class VideoFeed extends EventTarget {
+export class VideoFeed extends EventTarget {
     constructor(config = {}) {
         super();
         this.endpoint    = config.endpoint    ?? 'http://localhost:5000/infer';
@@ -15,12 +15,17 @@ class VideoFeed extends EventTarget {
 
         this._offscreen    = document.createElement('canvas');
         this._offscreenCtx = this._offscreen.getContext('2d');
-        this._preview      = document.getElementById('video-preview');
-        this._previewCtx   = this._preview?.getContext('2d') ?? null;
+        this._preview      = null;
+        this._previewCtx   = null;
 
         this._intervalId = null;
         this._stream     = null;
         this._active     = false;
+    }
+
+    setPreviewCanvas(canvas) {
+        this._preview = canvas;
+        this._previewCtx = canvas?.getContext('2d') ?? null;
     }
 
     async startWebcam() {
@@ -68,12 +73,10 @@ class VideoFeed extends EventTarget {
         this._offscreen.height = vh;
         this._offscreenCtx.drawImage(this._video, 0, 0, vw, vh);
 
-        // Draw preview
         if (this.showPreview && this._preview && this._previewCtx) {
             this._preview.width  = this._preview.clientWidth  || 268;
             this._preview.height = this._preview.clientHeight || 90;
             this._previewCtx.drawImage(this._video, 0, 0, this._preview.width, this._preview.height);
-            // Gold border overlay
             this._previewCtx.strokeStyle = 'rgba(240,200,64,0.7)';
             this._previewCtx.lineWidth   = 2;
             this._previewCtx.strokeRect(1, 1, this._preview.width - 2, this._preview.height - 2);
